@@ -1,0 +1,18 @@
+# Artificial Intelligence & Retrieval-Augmented Generation (RAG)
+
+## Executive Summary
+Retrieval-Augmented Generation (RAG) is an architectural pattern that enhances Large Language Models (LLMs) by integrating dynamic retrieval of domain-specific proprietary data. Instead of relying solely on parametric knowledge learned during training, RAG models fetch relevant factual context at query time from vector databases or document indexes.
+
+## Core Architecture Components
+1. Ingestion Pipeline: Ingests documents (PDF, DOCX, TXT, Markdown), performs layout analysis, and cleans textual data.
+2. Semantic Chunking: Segments documents into manageable chunks (e.g. 500-1000 characters with 100-200 character overlap) while preserving sentence integrity.
+3. Embedding Model: Transforms chunks into high-dimensional dense vector embeddings using models such as Google Gemini text-embedding-004.
+4. Vector Store & Database: Stores chunk records, metadata, and embeddings. MongoDB is utilized for user records, chat sessions, document metadata, and chunk indexing.
+5. Semantic Search & Top-K Retrieval: Computes cosine similarity between query embeddings and chunk embeddings to retrieve the most pertinent factual context.
+6. Grounded Generation: Injects retrieved chunks into an executive prompt for the LLM (e.g., Gemini 2.5 Flash), enforcing strict adherence to retrieved facts and preventing hallucinations.
+
+## Key Advantages
+- Elimination of Hallucinations: Answers are strictly grounded in verified enterprise documents.
+- Cost Efficiency: Avoids expensive fine-tuning of foundational LLMs.
+- Real-Time Updates: Uploading a new document immediately makes its contents retrievable without retraining.
+- Citations & Auditability: Users can inspect exact source documents, page numbers, and similarity metrics for every generated statement.

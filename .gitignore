@@ -1,0 +1,30 @@
+# Python virtual environments & bytecode
+.venv/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Node & Frontend build
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.oxlintrc.json
+
+# Environment variables
+.env
+
+# Uploads & local data storage
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/data_storage/*
+!backend/data_storage/.gitkeep
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Logs & temp
+*.log
