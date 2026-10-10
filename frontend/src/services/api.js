@@ -155,7 +155,23 @@ export const api = {
     return res.json();
   },
 
-  // System Diagnostics
+  // System Diagnostics and API Key
+  async saveApiKey(apiKey) {
+    const res = await fetch(`${API_BASE}/chat/settings/api-key`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({ api_key: apiKey }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to save API key');
+    }
+    return res.json();
+  },
+
   async getStatus() {
     const res = await fetch(`${API_BASE}/chat/status`, {
       headers: getAuthHeaders(),

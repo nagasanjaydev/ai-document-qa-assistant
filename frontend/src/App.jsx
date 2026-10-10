@@ -5,6 +5,7 @@ import DocumentsView from './components/DocumentsView';
 import ChatView from './components/ChatView';
 import AuthView from './components/AuthView';
 import ChunkInspectorModal from './components/ChunkInspectorModal';
+import SettingsModal from './components/SettingsModal';
 import { useAuth } from './context/AuthContext';
 import { api } from './services/api';
 
@@ -22,6 +23,7 @@ export default function App() {
   const [uploadStatusMessage, setUploadStatusMessage] = useState('');
   const [statusInfo, setStatusInfo] = useState(null);
   const [inspectingDoc, setInspectingDoc] = useState(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
   const showToast = (msg) => {
@@ -274,6 +276,7 @@ Current operational uptime across the document processing cluster is 99.98%, exc
         onNavigate={setCurrentView}
         statusInfo={statusInfo}
         onOpenAuth={() => setCurrentView('dashboard')}
+        onOpenSettings={() => setSettingsOpen(true)}
       />
 
       {/* View Switcher: Show AuthView if logged out */}
@@ -325,6 +328,15 @@ Current operational uptime across the document processing cluster is 99.98%, exc
         <ChunkInspectorModal
           doc={inspectingDoc}
           onClose={() => setInspectingDoc(null)}
+        />
+      )}
+
+      {/* Settings Modal */}
+      {settingsOpen && (
+        <SettingsModal
+          statusInfo={statusInfo}
+          onClose={() => setSettingsOpen(false)}
+          onRefreshStatus={loadStatus}
         />
       )}
 

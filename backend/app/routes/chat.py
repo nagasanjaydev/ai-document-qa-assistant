@@ -148,8 +148,60 @@ async def delete_conversation_history(
     return {"message": "Conversation history deleted."}
 
 
+@router.post("/settings/api-key")
+async def save_api_key(req: dict):
+    new_key = req.get("api_key", "").strip()
+    if not new_key:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="API key cannot be empty."
+        )
+
+    # Test key with Gemini
+    validation_status = "validated"
+    try:
+        from google import genai
+        client = genai.Client(api_key=new_key)
+        client.models.embed_content(
+            model=settings.GEMINI_EMBEDDING_MODEL,
+            contents="hello",
+        )
+    except Exception as e:
+        validation_status = f"saved (validation warning: {str(e)})"
+
+    # Set in memory
+    settings.GEMINI_API_KEY = new_key
+
+    # Persist in .env
+    from pathlib import Path
+    import re
+    env_paths = [
+        Path(__file__).resolve().parent.parent.parent.parent / ".env",
+        Path(__file__).resolve().parent.parent.parent / ".env"
+    ]
+    for p in env_paths:
+        if p.exists():
+            try:
+                content = p.read_text(encoding="utf-8")
+                if "GEMINI_API_KEY=" in content:
+                    content = re.sub(r"GEMINI_API_KEY=.*", f"GEMINI_API_KEY={new_key}", content)
+                else:
+                    content += f"\nGEMINI_API_KEY={new_key}\n"
+                p.write_text(content, encoding="utf-8")
+            except Exception:
+                pass
+
+    return {
+        "status": "success",
+        "validation": validation_status,
+        "message": "Google Gemini API Key activated successfully!",
+        "gemini_api_configured": True
+    }
+
+
 @router.get("/status")
 async def get_system_status(current_user: dict = Depends(get_current_user)):
+
     docs_col = get_documents_collection()
     chunks_col = get_chunks_collection()
 

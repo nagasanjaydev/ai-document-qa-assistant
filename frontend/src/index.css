@@ -1878,3 +1878,88 @@ body {
     height: 180px;
   }
 }
+
+/* Additional Settings and Status Styles */
+.status-api-key-btn {
+  background-color: #fef3c7;
+  color: #b45309;
+  border: 1px solid #fde68a;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.status-api-key-btn:hover {
+  background-color: #fde68a;
+}
+
+.alert-success {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #065f46;
+}
+
+.input-group-flex {
+  display: flex;
+  gap: 8px;
+}
+
+.input-group-flex .form-text-input {
+  flex: 1;
+}
+
+.system-diagnostics-box {
+  background: #f8fafc;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+
+.diagnostics-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 10px;
+}
+
+.diagnostics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.diagnostic-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-name {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.stat-data {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-body);
+}
+
+.font-mono {
+  font-family: var(--font-mono);
+}
+
+.inline-link {
+  color: var(--primary-blue);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.inline-link:hover {
+  text-decoration: underline;
+}

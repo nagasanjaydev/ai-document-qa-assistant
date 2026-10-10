@@ -1,10 +1,11 @@
 import React from 'react';
-import { FileText, Sparkles, Database, LayoutDashboard, MessageSquare, Files, LogOut, User } from 'lucide-react';
+import { FileText, Sparkles, Database, LayoutDashboard, MessageSquare, Files, LogOut, User, Key, Settings } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-export default function Header({ currentView, onNavigate, statusInfo, onOpenAuth }) {
+export default function Header({ currentView, onNavigate, statusInfo, onOpenAuth, onOpenSettings }) {
   const { user, logout } = useAuth();
   const isMongoConnected = !!statusInfo?.mongodb_connected;
+  const isGeminiConfigured = !!statusInfo?.gemini_api_configured;
 
   return (
     <header className="navbar-header">
@@ -50,14 +51,34 @@ export default function Header({ currentView, onNavigate, statusInfo, onOpenAuth
 
         {/* Right Action / Profile */}
         <div className="navbar-actions">
-          {/* Status Chip */}
+          {/* Database Status Chip */}
           <div
             className={`status-chip ${isMongoConnected ? 'status-connected' : 'status-fallback'}`}
             title={statusInfo?.db_status_message || 'Database status'}
           >
             <Database size={13} />
-            <span>{isMongoConnected ? 'MongoDB Online' : 'Local Storage Mode'}</span>
+            <span>{isMongoConnected ? 'MongoDB Online' : 'Local Storage'}</span>
           </div>
+
+          {/* Gemini API Key Trigger Chip */}
+          <button
+            className={`status-chip ${isGeminiConfigured ? 'status-connected' : 'status-api-key-btn'}`}
+            onClick={onOpenSettings}
+            title={isGeminiConfigured ? 'Gemini API is active' : 'Click to configure Gemini API Key'}
+          >
+            <Key size={13} />
+            <span>{isGeminiConfigured ? 'Gemini 2.5 Active' : 'Set API Key'}</span>
+          </button>
+
+          {/* Settings Gear Button */}
+          <button
+            className="btn-icon-subtle"
+            onClick={onOpenSettings}
+            title="Configure Gemini API & View Diagnostics"
+            aria-label="Settings"
+          >
+            <Settings size={17} />
+          </button>
 
           {user ? (
             <div className="user-profile-menu">
