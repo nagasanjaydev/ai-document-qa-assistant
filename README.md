@@ -245,6 +245,49 @@ Run the automated test suites:
 
 ---
 
+## ☁️ Deploying to Render (render.com)
+
+DocuMind AI is pre-configured for **seamless zero-configuration deployment on Render's Free Tier** as a unified full-stack web service (FastAPI backend + Vite React SPA).
+
+### Method 1: Automatic Blueprint (Easiest)
+1. Push your repository to **GitHub**.
+2. Go to the [Render Dashboard](https://dashboard.render.com/) and click **New +** → **Blueprint**.
+3. Connect your GitHub repository.
+4. Render will detect [`render.yaml`](file:///Users/sanjay/AI%20Document%20QA%20Assistant%20/render.yaml) and configure the web service automatically.
+5. Provide your environment variables when prompted:
+   - `GEMINI_API_KEY`: Your key from [Google AI Studio](https://aistudio.google.com/)
+   - `MONGODB_URI`: Your MongoDB Atlas cluster connection string (optional; falls back to persistent store)
+6. Click **Apply**. Render will build and deploy your live full-stack app!
+
+---
+
+### Method 2: Manual Web Service (Docker - Recommended)
+1. In Render, click **New +** → **Web Service**.
+2. Select your GitHub repository.
+3. Configure the service settings:
+   - **Name:** `documind-ai` (or your choice)
+   - **Region:** Any (e.g. Oregon, Frankfurt)
+   - **Branch:** `main`
+   - **Runtime:** **Docker**
+   - **Plan:** **Free**
+4. Under **Environment Variables**, add:
+   - `GEMINI_API_KEY`: `your_gemini_api_key`
+   - `MONGODB_URI`: `your_mongodb_atlas_uri` (optional)
+   - `JWT_SECRET_KEY`: `generate_a_random_secret_string`
+   - `FRONTEND_ORIGIN`: `*`
+   - `PORT`: `10000`
+5. Click **Create Web Service**. Render builds the multi-stage Docker image and deploys your live application at `https://documind-ai.onrender.com`.
+
+---
+
+### Method 3: Native Python Runtime with `build.sh`
+If you choose the native **Python 3** runtime on Render:
+- **Build Command:** `./build.sh`
+- **Start Command:** `uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT`
+- Render will execute [`build.sh`](file:///Users/sanjay/AI%20Document%20QA%20Assistant%20/build.sh), compile the React frontend into `frontend/dist`, and FastAPI will serve the full SPA.
+
+---
+
 ## 🔒 Security & Reliability
 
 * **Password Hashing:** Passwords are never stored in plaintext; hashed with `bcrypt` (12 rounds).

@@ -1,7 +1,11 @@
+import os
 import logging
+from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 from backend.app.core.config import settings
 from backend.app.database.mongodb import db_manager
 from backend.app.routes import auth, documents, chat
@@ -31,6 +35,7 @@ app = FastAPI(
 
 # CORS configuration
 origins = [
+    "*",  # Allow all for seamless deployment across custom domains
     settings.FRONTEND_ORIGIN,
     "http://localhost:5173",
     "http://127.0.0.1:5173",
@@ -45,25 +50,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount routes at root level
+# Mount API routers (both root and /api prefixed)
 app.include_router(auth.router)
 app.include_router(documents.router)
 app.include_router(chat.router)
 
-# Also mount at /api prefix for proxy compatibility
 app.include_router(auth.router, prefix="/api")
 app.include_router(documents.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
-
-
-@app.get("/")
-async def root():
-    return {
-        "app": settings.PROJECT_NAME,
-        "version": settings.VERSION,
-        "docs_url": "/docs",
-        "status": "online"
-    }
 
 
 @app.get("/health")
@@ -75,3 +69,36 @@ async def health():
         "database_status": db_manager.status_message,
         "gemini_api_configured": bool(settings.GEMINI_API_KEY.strip()),
     }
+
+
+# Static React Frontend Serving (Production & Render Single-Service Deployment)
+candidate_dirs = [
+    Path(__file__).resolve().parent.parent.parent / "frontend" / "dist",
+    Path.cwd() / "frontend" / "dist",
+    Path.cwd() / "dist",
+]
+frontend_dist = next((d for d in candidate_dirs if d.exists() and (d / "index.html").exists()), None)
+
+if frontend_dist and frontend_dist.exists():
+    assets_dir = frontend_dist / "assets"
+    if assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        # If requested path matches a real static file in dist (like favicon.svg)
+        if full_path:
+            file_candidate = frontend_dist / full_path
+            if file_candidate.is_file():
+                return FileResponse(file_candidate)
+        # Otherwise serve index.html for React SPA client routing
+        return FileResponse(frontend_dist / "index.html")
+else:
+    @app.get("/")
+    async def root():
+        return {
+            "app": settings.PROJECT_NAME,
+            "version": settings.VERSION,
+            "docs_url": "/docs",
+            "status": "online"
+        }

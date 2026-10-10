@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: ai-document-qa-assistant
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: oregon
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: GEMINI_EMBEDDING_MODEL
+        value: text-embedding-004
+      - key: MONGODB_URI
+        sync: false
+      - key: MONGODB_DB_NAME
+        value: doc_qa_assistant
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: FRONTEND_ORIGIN
+        value: "*"
+      - key: MAX_UPLOAD_SIZE_MB
+        value: "20"
