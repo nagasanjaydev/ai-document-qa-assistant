@@ -1,26 +1,27 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import Header from './components/Header';
-import Sidebar from './components/Sidebar';
-import ChatArea from './components/ChatArea';
+import DashboardView from './components/DashboardView';
+import DocumentsView from './components/DocumentsView';
+import ChatView from './components/ChatView';
+import AuthView from './components/AuthView';
 import ChunkInspectorModal from './components/ChunkInspectorModal';
-import SettingsModal from './components/SettingsModal';
-import AuthModal from './components/AuthModal';
 import { useAuth } from './context/AuthContext';
 import { api } from './services/api';
 
 export default function App() {
-  const { user, apiKey } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+
+  const [currentView, setCurrentView] = useState('dashboard'); // 'dashboard', 'chat', 'documents'
   const [documents, setDocuments] = useState([]);
-  const [activeDocId, setActiveDocId] = useState(null);
-  const [inspectingDoc, setInspectingDoc] = useState(null);
-  const [sessions, setSessions] = useState([]);
-  const [currentSessionId, setCurrentSessionId] = useState(null);
+  const [selectedDocId, setSelectedDocId] = useState(null);
+  const [conversations, setConversations] = useState([]);
+  const [currentConvId, setCurrentConvId] = useState(null);
   const [messages, setMessages] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loadingMessages, setLoadingMessages] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadStatusMessage, setUploadStatusMessage] = useState('');
   const [statusInfo, setStatusInfo] = useState(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  const [authOpen, setAuthOpen] = useState(false);
+  const [inspectingDoc, setInspectingDoc] = useState(null);
   const [toastMessage, setToastMessage] = useState('');
 
   const showToast = (msg) => {
@@ -46,25 +47,25 @@ export default function App() {
     }
   }, []);
 
-  const loadSessions = useCallback(async () => {
+  const loadConversations = useCallback(async () => {
     try {
-      const s = await api.listSessions();
-      setSessions(s);
+      const convs = await api.listChatHistory();
+      setConversations(convs);
     } catch (e) {
-      console.warn('Failed to load sessions:', e);
+      console.warn('Failed to load chat history:', e);
     }
   }, []);
 
-  const loadSessionMessages = useCallback(async (sessionId) => {
-    if (!sessionId) {
+  const loadConversationMessages = useCallback(async (convId) => {
+    if (!convId) {
       setMessages([]);
       return;
     }
     try {
-      const msgs = await api.getSessionMessages(sessionId);
+      const msgs = await api.getConversationMessages(convId);
       setMessages(msgs);
     } catch (e) {
-      console.warn('Failed to load session messages:', e);
+      console.warn('Failed to load conversation messages:', e);
       setMessages([]);
     }
   }, []);
@@ -72,63 +73,105 @@ export default function App() {
   useEffect(() => {
     if (user) {
       loadDocuments();
-      loadSessions();
+      loadConversations();
       loadStatus();
     }
-  }, [user, loadDocuments, loadSessions, loadStatus]);
+  }, [user, loadDocuments, loadConversations, loadStatus]);
 
   useEffect(() => {
-    if (currentSessionId) {
-      loadSessionMessages(currentSessionId);
+    if (currentConvId) {
+      loadConversationMessages(currentConvId);
     }
-  }, [currentSessionId, loadSessionMessages]);
+  }, [currentConvId, loadConversationMessages]);
 
   const handleUploadFile = async (file) => {
     try {
       setUploading(true);
-      const res = await api.uploadDocument(file, apiKey);
-      showToast(`Indexed ${res.document.filename} into ${res.chunk_count} chunks!`);
+      setUploadStatusMessage(`Parsing ${file.name} & generating vector embeddings...`);
+      const res = await api.uploadDocument(file);
+      showToast(`Document indexed successfully: ${res.chunk_count} chunks.`);
       await loadDocuments();
       await loadStatus();
     } catch (err) {
       showToast(`Error: ${err.message}`);
     } finally {
       setUploading(false);
+      setUploadStatusMessage('');
     }
   };
 
   const handleLoadSamples = async () => {
     try {
       setUploading(true);
-      // Fetch sample documents from public / sample assets
+      setUploadStatusMessage('Loading sample documents into RAG vector index...');
       const sampleFiles = [
-        { name: 'rag_architecture_overview.txt', type: 'text/plain', content: '# Artificial Intelligence & Retrieval-Augmented Generation (RAG)\n\nRetrieval-Augmented Generation (RAG) is an architectural pattern that enhances Large Language Models (LLMs) by integrating dynamic retrieval of domain-specific proprietary data.\n\nCore Architecture Components:\n1. Ingestion Pipeline: Ingests documents (PDF, DOCX, TXT, Markdown) and extracts text.\n2. Semantic Chunking: Segments documents into manageable chunks (500-1000 characters) with overlap while preserving sentence integrity.\n3. Embedding Model: Transforms chunks into high-dimensional dense vector embeddings using Google Gemini text-embedding-004.\n4. Vector Store & Database: Stores chunk records, metadata, and embeddings in MongoDB.\n5. Semantic Search & Top-K Retrieval: Computes cosine similarity between query embeddings and chunk embeddings to retrieve the most pertinent factual context.\n6. Grounded Generation: Injects retrieved chunks into an executive prompt for the LLM (Gemini 2.5 Flash), enforcing strict adherence to retrieved facts and preventing hallucinations.' },
-        { name: 'cloud_security_report.txt', type: 'text/plain', content: 'Quarterly Cloud Security & Compliance Report - Q4 2025\n\nSecurity Posture and Encryption Standards:\nAll document stores and vector embeddings are encrypted at rest using AES-256 and in transit via TLS 1.3. Role-Based Access Control (RBAC) and JSON Web Tokens (JWT) enforce granular document isolation, preventing cross-tenant information leakage.\n\nCompliance Frameworks Status:\n1. SOC 2 Type II: Passed with Zero Non-Conformances (Renewal: September 2026)\n2. HIPAA HITECH: Fully Certified (Renewal: November 2026)\n3. ISO 27001:2022: Certified (Renewal: January 2027)\n\nIncident Response and Uptime SLA:\nCurrent operational uptime across the document processing cluster is 99.98%, well exceeding the 99.9% target SLA. Zero critical vulnerabilities detected.' },
-        { name: 'employee_handbook_summary.txt', type: 'text/plain', content: 'Company Employee Handbook: Remote Work Policy\n\n1. Core Working Hours: Employees are expected to be reachable between 10:00 AM and 4:00 PM EST.\n2. Equipment Allowance: Every remote employee receives an annual $1,200 technology stipend for home office hardware, monitors, and ergonomic furniture.\n3. Paid Time Off: Full-time personnel receive 25 days of paid vacation and 10 paid sick days per calendar year.\n4. Health Benefits: Comprehensive medical, dental, and vision coverage starts on Day 1 of employment with 100% employer-sponsored premium options.' }
+        {
+          name: 'rag_architecture_overview.txt',
+          type: 'text/plain',
+          content: `# Artificial Intelligence & Retrieval-Augmented Generation (RAG)
+
+## Executive Summary
+Retrieval-Augmented Generation (RAG) is an architectural pattern that enhances Large Language Models (LLMs) by integrating dynamic retrieval of domain-specific proprietary data. Instead of relying solely on parametric knowledge learned during training, RAG models fetch relevant factual context at query time from vector databases or document indexes.
+
+## Core Architecture Components
+1. Ingestion Pipeline: Ingests documents (PDF, DOCX, TXT, Markdown), extracts text, and performs validation.
+2. Semantic Chunking: Segments documents into manageable chunks (500-1000 characters with overlap) while preserving sentence integrity.
+3. Embedding Model: Transforms chunks into high-dimensional dense vector embeddings using Google Gemini text-embedding-004.
+4. Vector Store & Database: Stores chunk records, metadata, and embeddings in MongoDB.
+5. Semantic Search & Top-K Retrieval: Computes cosine similarity between query embeddings and chunk embeddings to retrieve the most pertinent factual context.
+6. Grounded Generation: Injects retrieved chunks into an executive prompt for the LLM (Gemini 2.5 Flash), enforcing strict adherence to retrieved facts and preventing hallucinations.`
+        },
+        {
+          name: 'cloud_security_compliance.txt',
+          type: 'text/plain',
+          content: `Quarterly Cloud Security & Compliance Audit Report - Q4 2025
+
+Security Posture and Encryption Standards:
+All document stores and vector embeddings are encrypted at rest using AES-256 and in transit via TLS 1.3. Role-Based Access Control (RBAC) and JSON Web Tokens (JWT) enforce granular document isolation, preventing cross-tenant information leakage.
+
+Compliance Benchmarks:
+1. SOC 2 Type II: Passed with Zero Non-Conformances (Target Renewal: September 2026)
+2. HIPAA HITECH: Fully Certified (Target Renewal: November 2026)
+3. ISO 27001:2022: Certified (Target Renewal: January 2027)
+
+Incident Response and Uptime SLA:
+Current operational uptime across the document processing cluster is 99.98%, exceeding the 99.9% target SLA. Zero critical vulnerabilities were detected during the quarterly penetration test.`
+        },
+        {
+          name: 'employee_remote_work_policy.txt',
+          type: 'text/plain',
+          content: `Company Employee Handbook: Remote Work Policy
+
+1. Core Working Hours: Employees are expected to be reachable between 10:00 AM and 4:00 PM EST.
+2. Equipment Allowance: Every remote employee receives an annual $1,200 technology stipend for home office hardware, external monitors, and ergonomic furniture.
+3. Paid Time Off: Full-time personnel receive 25 days of paid vacation and 10 paid sick days per calendar year.
+4. Health Benefits: Comprehensive medical, dental, and vision coverage starts on Day 1 of employment with 100% employer-sponsored premium options.`
+        }
       ];
 
       for (const s of sampleFiles) {
         const blob = new Blob([s.content], { type: s.type });
         const file = new File([blob], s.name, { type: s.type });
-        await api.uploadDocument(file, apiKey);
+        await api.uploadDocument(file);
       }
 
-      showToast('Successfully loaded 3 sample documents with vector embeddings!');
+      showToast('Loaded 3 sample documents with vector embeddings!');
       await loadDocuments();
       await loadStatus();
     } catch (err) {
       showToast(`Failed to load samples: ${err.message}`);
     } finally {
       setUploading(false);
+      setUploadStatusMessage('');
     }
   };
 
   const handleDeleteDoc = async (docId) => {
-    if (!window.confirm('Are you sure you want to delete this document and its vector embeddings?')) return;
+    if (!window.confirm('Delete this document and its corresponding chunk embeddings?')) return;
     try {
       await api.deleteDocument(docId);
-      if (activeDocId === docId) {
-        setActiveDocId(null);
+      if (selectedDocId === docId) {
+        setSelectedDocId(null);
       }
       showToast('Document deleted.');
       await loadDocuments();
@@ -138,122 +181,143 @@ export default function App() {
     }
   };
 
-  const handleSendMessage = async (queryText) => {
-    if (!queryText.trim() || loading) return;
+  const handleSendMessage = async (question) => {
+    if (!question.trim() || loadingMessages) return;
 
-    // Optimistically append user message to UI
-    const optimisticUserMsg = {
-      id: `temp-${Date.now()}`,
+    // Optimistically add user question to UI
+    const tempUserMsg = {
+      message_id: `temp-${Date.now()}`,
       role: 'user',
-      content: queryText,
-      created_at: new Date().toISOString(),
+      text: question,
+      timestamp: new Date().toISOString(),
     };
-    setMessages((prev) => [...prev, optimisticUserMsg]);
-    setLoading(true);
+    setMessages((prev) => [...prev, tempUserMsg]);
+    setLoadingMessages(true);
 
     try {
-      const response = await api.sendQuery({
-        query: queryText,
-        docId: activeDocId,
-        conversationId: currentSessionId,
+      const response = await api.askQuestion({
+        question,
+        documentId: selectedDocId,
+        conversationId: currentConvId,
         topK: 4,
-        apiKey: apiKey || null,
       });
 
-      if (!currentSessionId) {
-        setCurrentSessionId(response.conversation_id);
+      if (!currentConvId) {
+        setCurrentConvId(response.conversation_id);
       }
 
       const assistantMsg = {
-        id: `resp-${Date.now()}`,
+        message_id: `resp-${Date.now()}`,
         role: 'assistant',
-        content: response.answer,
+        text: response.answer,
         sources: response.sources,
-        created_at: new Date().toISOString(),
+        timestamp: new Date().toISOString(),
       };
-
       setMessages((prev) => [...prev, assistantMsg]);
-      await loadSessions();
+      await loadConversations();
       await loadStatus();
     } catch (err) {
       const errorMsg = {
-        id: `err-${Date.now()}`,
+        message_id: `err-${Date.now()}`,
         role: 'assistant',
-        content: `**Error executing query:** ${err.message}`,
-        created_at: new Date().toISOString(),
+        text: `**Query Execution Error:** ${err.message}`,
+        timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errorMsg]);
     } finally {
-      setLoading(false);
+      setLoadingMessages(false);
     }
   };
 
-  const handleNewChat = () => {
-    setCurrentSessionId(null);
+  const handleStartNewChat = (docId = null) => {
+    setCurrentConvId(null);
     setMessages([]);
+    if (docId !== undefined) {
+      setSelectedDocId(docId);
+    }
+    setCurrentView('chat');
   };
 
-  const handleSelectSession = (sessionId) => {
-    setCurrentSessionId(sessionId);
+  const handleOpenConversation = (convId) => {
+    setCurrentConvId(convId);
+    setCurrentView('chat');
   };
 
-  const handleDeleteSession = async (sessionId) => {
+  const handleDeleteConversation = async (convId) => {
     try {
-      await api.deleteSession(sessionId);
-      if (currentSessionId === sessionId) {
-        handleNewChat();
+      await api.deleteConversation(convId);
+      if (currentConvId === convId) {
+        setCurrentConvId(null);
+        setMessages([]);
       }
-      await loadSessions();
+      await loadConversations();
       showToast('Conversation deleted.');
     } catch (err) {
       showToast(`Error: ${err.message}`);
     }
   };
 
-  const activeDoc = documents.find((d) => d.id === activeDocId) || null;
+  if (authLoading) {
+    return (
+      <div className="empty-panel-state" style={{ height: '100vh' }}>
+        <span className="spinner-inline-blue"></span>
+        <p>Loading DocuMind AI...</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="app-container">
-      {/* Top Header */}
+    <div className="app-viewport">
+      {/* Top Navbar */}
       <Header
+        currentView={currentView}
+        onNavigate={setCurrentView}
         statusInfo={statusInfo}
-        onOpenSettings={() => setSettingsOpen(true)}
-        onOpenAuth={() => setAuthOpen(true)}
+        onOpenAuth={() => setCurrentView('dashboard')}
       />
 
-      {/* Main Workspace Layout */}
-      <div className="app-main-layout">
-        <Sidebar
+      {/* View Switcher: Show AuthView if logged out */}
+      {!user ? (
+        <AuthView />
+      ) : currentView === 'dashboard' ? (
+        <DashboardView
           documents={documents}
-          activeDocId={activeDocId}
-          onSelectDoc={setActiveDocId}
+          conversations={conversations}
+          statusInfo={statusInfo}
+          onNavigate={setCurrentView}
+          onOpenUpload={() => setCurrentView('documents')}
+          onNewChat={handleStartNewChat}
+          onOpenConversation={handleOpenConversation}
+          onDeleteDoc={handleDeleteDoc}
+          onLoadSamples={handleLoadSamples}
+          loading={uploading}
+        />
+      ) : currentView === 'documents' ? (
+        <DocumentsView
+          documents={documents}
+          onUploadFile={handleUploadFile}
           onDeleteDoc={handleDeleteDoc}
           onInspectDoc={setInspectingDoc}
-          onUploadFile={handleUploadFile}
+          onStartChat={handleStartNewChat}
           onLoadSamples={handleLoadSamples}
-          sessions={sessions}
-          currentSessionId={currentSessionId}
-          onSelectSession={handleSelectSession}
-          onNewChat={handleNewChat}
-          onDeleteSession={handleDeleteSession}
           uploading={uploading}
+          uploadStatusMessage={uploadStatusMessage}
         />
-
-        <ChatArea
+      ) : (
+        <ChatView
+          documents={documents}
+          selectedDocId={selectedDocId}
+          onSelectDoc={setSelectedDocId}
+          conversations={conversations}
+          currentConvId={currentConvId}
+          onSelectConversation={handleOpenConversation}
+          onNewChat={handleStartNewChat}
+          onDeleteConversation={handleDeleteConversation}
           messages={messages}
           onSendMessage={handleSendMessage}
-          loading={loading}
-          activeDoc={activeDoc}
-          documentsCount={documents.length}
+          loading={loadingMessages}
           onLoadSamples={handleLoadSamples}
         />
-      </div>
-
-      {/* Toast Notification */}
-      {toastMessage && (
-        <div className="toast-notification">
-          <span>{toastMessage}</span>
-        </div>
       )}
 
       {/* Chunk Inspector Modal */}
@@ -264,18 +328,11 @@ export default function App() {
         />
       )}
 
-      {/* Settings & Gemini Configuration Modal */}
-      {settingsOpen && (
-        <SettingsModal
-          statusInfo={statusInfo}
-          onClose={() => setSettingsOpen(false)}
-          onRefreshStatus={loadStatus}
-        />
-      )}
-
-      {/* User Authentication Modal */}
-      {authOpen && (
-        <AuthModal onClose={() => setAuthOpen(false)} />
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="toast-bar">
+          <span>{toastMessage}</span>
+        </div>
       )}
     </div>
   );

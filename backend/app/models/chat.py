@@ -2,46 +2,45 @@ from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 
 
-class SourceCitation(BaseModel):
-    doc_id: str
+class SourceReference(BaseModel):
+    document_id: str
     filename: str
     chunk_index: int
-    page_num: Optional[int] = 1
-    score: float
-    snippet: str
+    page_number: Optional[int] = 1
+    relevance_score: float
+    text_snippet: str
 
 
-class ChatQueryRequest(BaseModel):
-    query: str = Field(..., min_length=1)
-    doc_id: Optional[str] = None  # None means search across all user documents
+class ChatAskRequest(BaseModel):
+    question: str = Field(..., min_length=1)
+    document_id: Optional[str] = None  # None queries all authorized documents for the user
     conversation_id: Optional[str] = None
     top_k: int = Field(default=4, ge=1, le=10)
-    api_key: Optional[str] = None  # Optional client-provided Gemini API key
 
 
-class ChatMessage(BaseModel):
-    id: str
-    conversation_id: str
-    user_id: str
-    role: str  # "user" or "assistant"
-    content: str
-    sources: Optional[List[SourceCitation]] = None
-    created_at: str
-
-
-class ChatResponse(BaseModel):
+class ChatAskResponse(BaseModel):
     answer: str
     conversation_id: str
-    sources: List[SourceCitation]
+    sources: List[SourceReference]
     model_used: str
 
 
-class ConversationSession(BaseModel):
-    id: str
-    user_id: str
-    doc_id: Optional[str] = None
-    doc_name: Optional[str] = None
+class ConversationSummary(BaseModel):
+    conversation_id: str
+    owner_id: str
     title: str
+    document_id: Optional[str] = None
+    document_name: Optional[str] = None
+    message_count: int = 0
     created_at: str
     updated_at: str
-    message_count: int = 0
+
+
+class MessageItem(BaseModel):
+    message_id: str
+    conversation_id: str
+    owner_id: str
+    role: str  # "user" or "assistant"
+    text: str
+    sources: Optional[List[SourceReference]] = None
+    timestamp: str

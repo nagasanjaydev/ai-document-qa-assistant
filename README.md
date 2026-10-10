@@ -1,198 +1,225 @@
-# DocuMind AI — AI Document QA Assistant
+# DocuMind AI — Full-Stack AI Document QA Assistant (RAG + Gemini)
 
-An enterprise-grade, full-stack AI Document QA Assistant built with **React.js**, **FastAPI (Python)**, **MongoDB**, **Google Gemini API**, and **Retrieval-Augmented Generation (RAG)**. Enables users to upload PDF, DOCX, and TXT files and interact with their documents through natural-language queries with verified, grounded citations.
-
----
-
-## 🚀 Key Highlights & Resume Summary
-
-* **AI-Powered Multi-Format Document Ingestion:** Built with React.js and FastAPI, supporting direct upload and extraction for `.pdf` (via `pypdf`), `.docx` (via `python-docx`), `.txt`, `.md`, and `.csv` files.
-* **Production RAG Pipeline:** Implemented intelligent sliding-window semantic chunking (preserving sentence and paragraph boundaries), dense vector embeddings (`text-embedding-004` + resilient fallback vectorizer), and cosine similarity search to retrieve top-$k$ contextual excerpts.
-* **Grounded LLM Responses via Gemini API:** Formulates executive prompts with retrieved context chunks, enforcing strict grounding to prevent hallucinations while providing transparent source citations (document title, page number, relevance score, snippet).
-* **MongoDB-Backed Persistence:** Complete user authentication (bcrypt + JWT), document metadata & chunk storage, and multi-turn chat conversation history with RESTful APIs. Includes an automatic local persistence engine for zero-friction setup even when an external MongoDB server is not active.
+A production-ready, full-stack AI Document QA Assistant built from scratch using **React.js**, **FastAPI (Python)**, **MongoDB**, and **Google Gemini API**. Enables users to upload enterprise documents (PDF, DOCX, TXT), perform semantic vector retrieval, and interact through a grounded natural-language conversational interface.
 
 ---
 
-## 🏛️ System Architecture
+## 🏛️ System Architecture & Data Flow
 
 ```mermaid
 flowchart TD
-    subgraph Frontend["React.js Frontend (Vite)"]
-        UI["Modern Dashboard & Chat Workspace"]
-        UploadZone["Drag & Drop Multi-Format Uploader"]
-        DocLib["Document Library & Scope Selector"]
+    subgraph Client["Frontend: React.js (Vite)"]
+        Dashboard["Dashboard & Analytics"]
+        UploadZone["Drag-and-Drop Ingestion Zone"]
+        ChatInterface["ChatGPT-Style Conversational UI"]
         CitationsUI["Interactive Grounded Citations Accordion"]
-        ChunkInspector["Chunk & Embedding Vector Inspector"]
-        AuthUI["JWT Auth / Instant Demo Login"]
+        Inspector["Chunk & Vector Embedding Inspector"]
     end
 
-    subgraph Backend["FastAPI Backend (Python)"]
-        RouterAuth["/api/auth (Login, Register, Demo)"]
-        RouterDocs["/api/documents (Upload, Parse, Chunk, List)"]
-        RouterChat["/api/chat (Query, RAG, Sessions, History)"]
+    subgraph Server["Backend: FastAPI (Python 3.11+)"]
+        AuthRouter["POST /auth/login | /auth/register"]
+        DocRouter["POST /documents/upload | GET /documents"]
+        ChatRouter["POST /chat/ask | GET /chat/history"]
         
-        Parser["Document Parser (pypdf, python-docx, text)"]
+        Parser["Document Parser (pypdf, python-docx, txt)"]
         Chunker["Semantic Sliding-Window Text Chunker"]
         EmbeddingEngine["Embedding Service (Gemini text-embedding-004 + Fallback)"]
-        RAGPipeline["RAG Engine (Cosine Similarity Top-K Retrieval)"]
+        RAGPipeline["RAG Engine (Top-K Cosine Similarity Retrieval)"]
     end
 
-    subgraph External["External Services"]
+    subgraph DataStore["Persistence & AI Services"]
         GeminiAPI["Google Gemini API (gemini-2.5-flash / text-embedding-004)"]
         MongoDB["MongoDB Database / Atlas Cluster"]
+        FileStore["Local Storage (./uploads)"]
     end
 
-    UI -->|RESTful API / JWT| Backend
-    UploadZone --> Parser
-    Parser --> Chunker
-    Chunker --> EmbeddingEngine
+    UploadZone -->|Multipart Form Upload| DocRouter
+    DocRouter -->|Validate & Extract| Parser
+    DocRouter -->|Persist File| FileStore
+    Parser -->|Paginated Sections| Chunker
+    Chunker -->|Sliding Overlap Chunks| EmbeddingEngine
     EmbeddingEngine -->|Generate Embeddings| GeminiAPI
     EmbeddingEngine -->|Store Chunks & Embeddings| MongoDB
     
-    UI -->|Natural Language Query| RouterChat
-    RouterChat --> RAGPipeline
-    RAGPipeline -->|Retrieve Top-K Chunks| MongoDB
+    ChatInterface -->|Natural Language Question| ChatRouter
+    ChatRouter -->|Vector Search & Similarity| RAGPipeline
+    RAGPipeline -->|Retrieve Top-K Passages| MongoDB
     RAGPipeline -->|Grounded Context Prompt| GeminiAPI
-    GeminiAPI -->|Answer + Citations| UI
+    GeminiAPI -->|Answer + Citations| ChatRouter
+    ChatRouter -->|JSON Response| CitationsUI
 ```
 
 ---
 
-## 🛠️ Tech Stack
+## ✨ Features
+
+### 1. Document Ingestion & Parsing
+* **Multi-Format Extraction:** Direct text extraction for `.pdf` (via `pypdf`), `.docx` (via `python-docx` including tables), and `.txt` / `.md` files.
+* **Server-Side Validation:** Enforces MIME types, file extensions, and file size limits (`MAX_UPLOAD_SIZE_MB=20`).
+* **Safe Local Storage:** Stores original documents in `./uploads` and cleans up associated files and vectors upon deletion.
+
+### 2. Semantic Sliding-Window Chunking
+* Splits text using a **700-character window** with **140-character overlap**.
+* Preserves sentence structure (`. `, `? `, `! `) and paragraph boundaries (`\n\n`) to prevent fragmenting semantic meaning.
+* Attaches essential metadata to every chunk: `document_id`, `owner_id`, `page_number`, `chunk_index`, and character counts.
+
+### 3. Vector Embeddings & Similarity Search
+* **Google Gemini Embeddings:** Uses the current official `google-genai` SDK with `text-embedding-004`.
+* **Deterministic Fallback Vectorizer:** Includes an offline dense feature generator so similarity search works even if an API key is not yet configured.
+* **Vector Similarity:** Computes cosine similarity via NumPy to retrieve top-$k$ relevant passages.
+* **MongoDB Atlas Vector Search Ready:** Document chunks can be queried using cosine similarity in MongoDB Atlas or locally.
+
+### 4. Grounded Answer Generation
+* Constructs an executive prompt injecting retrieved passages with document and page annotations.
+* System prompt strictly enforces grounding: answers only from document context and explicitly admits when information is missing.
+* Defends against prompt injection contained within uploaded document contents.
+* Generates answers using `gemini-2.5-flash`.
+* Returns **transparent source citations**: document name, page number, relevance score (0–100%), and passage excerpt.
+
+### 5. MongoDB Persistence & Authentication
+* **Real Authentication:** Secure password hashing using `bcrypt` and signed JWT tokens (`pyjwt`).
+* **Multi-Tenancy:** Strict authorization isolating documents, chunks, and chat history to their respective owners.
+* **Collections:** `users`, `documents`, `document_chunks`, `conversations`, `messages`.
+* **Resilient Fallback Engine:** Automatically detects if MongoDB is offline and activates a local JSON persistent store without crashing.
+
+### 6. Modern Light-Theme Frontend
+* Professional AI SaaS dashboard with a restrained **blue-and-white color palette**, subtle shadows, and rounded cards.
+* **Dashboard View:** Stat cards, recent documents table, recent conversations list, quick upload.
+* **AI Chat Interface:** ChatGPT-style layout, document scope filter (All Documents or specific file), Enter-to-send (Shift+Enter newline), loading pulse, copy-answer button.
+* **Grounded Citations Accordion:** Collapsible source badges showing exact page numbers, similarity match, and quoted excerpts.
+* **Chunk & Vector Inspector:** Visual modal to inspect segmented text chunks and character lengths.
+
+---
+
+## 🛠️ Technology Stack
 
 | Layer | Technologies |
 |---|---|
-| **Frontend** | React 19, Vite, Lucide Icons, React-Markdown, Modern CSS3 with Glassmorphism |
-| **Backend** | FastAPI, Uvicorn, Python 3.11+, Pydantic v2 |
+| **Frontend** | React 19, Vite, Lucide React, React-Markdown, Modern CSS3 |
+| **Backend** | Python 3.11+, FastAPI, Uvicorn, Pydantic v2 |
 | **AI / RAG** | Google Gemini API (`google-genai`), `text-embedding-004`, `gemini-2.5-flash`, NumPy |
-| **Document Processing**| `pypdf` (PDF extraction), `python-docx` (DOCX & tables), UTF-8 / multi-encoding TXT |
+| **Document Processing**| `pypdf`, `python-docx`, UTF-8 / Multi-encoding Python Text Engine |
 | **Database** | MongoDB (`motor` async driver, `pymongo`), auto-fallback persistent store |
-| **Security & Auth** | JSON Web Tokens (`pyjwt`), Bcrypt password hashing |
+| **Security** | Bcrypt password hashing, Signed JWT Bearer Tokens (`pyjwt`) |
 
 ---
 
-## 📂 Project Directory Structure
+## 💻 Apple Silicon (MacBook Air M2) Setup Guide
 
-```
-AI Document QA Assistant/
-├── backend/
-│   ├── app/
-│   │   ├── config.py             # Environment variables and Pydantic settings
-│   │   ├── database.py           # MongoDB connection & resilient fallback engine
-│   │   ├── main.py               # FastAPI app, CORS, lifespan, routes
-│   │   ├── models/
-│   │   │   ├── user.py           # Auth, User, and Token schemas
-│   │   │   ├── document.py       # Document metadata and Chunk schemas
-│   │   │   └── chat.py           # Query, Citation, and Session schemas
-│   │   ├── routers/
-│   │   │   ├── auth.py           # Registration, Login, Demo user endpoints
-│   │   │   ├── documents.py      # Upload, list, inspect chunks, delete
-│   │   │   └── chat.py           # RAG query, conversation sessions, status
-│   │   └── services/
-│   │       ├── auth_service.py   # JWT token creation and bcrypt verification
-│   │       ├── document_parser.py# PDF, DOCX, and TXT parsing
-│   │       ├── chunker.py        # Semantic sliding-window chunker
-│   │       ├── embedding_service.py # Gemini embeddings & vector similarity
-│   │       ├── rag_service.py    # Semantic search & grounded LLM generation
-│   │       └── chat_service.py   # Multi-turn conversation persistence
-│   ├── run.py                    # Backend server runner
-│   └── sample_documents/         # Ready-to-use sample PDF, DOCX, and TXT files
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── Header.jsx        # Branding, live status chips, user menu
-│   │   │   ├── Sidebar.jsx       # Document list, drag-and-drop, sessions
-│   │   │   ├── ChatArea.jsx      # Markdown chat, Grounded Citations Accordion
-│   │   │   ├── ChunkInspectorModal.jsx # Visual inspector for document chunks
-│   │   │   ├── SettingsModal.jsx # Gemini API key setup and diagnostics
-│   │   │   └── AuthModal.jsx     # Login, Register, Instant Demo modal
-│   │   ├── context/
-│   │   │   └── AuthContext.jsx   # Auth provider with token and API key sync
-│   │   ├── services/
-│   │   │   └── api.js            # Frontend REST API client
-│   │   ├── App.jsx               # Root application layout and state
-│   │   ├── index.css             # Polished modern theme with Glassmorphism
-│   │   └── main.jsx
-│   ├── index.html
-│   └── vite.config.js
-├── start.sh                      # Unified one-command launch script
-├── test_backend.py               # Unit & integration test suite
-├── test_api_client.py            # End-to-end REST API validation suite
-├── requirements.txt              # Python dependencies
-├── .env.example                  # Environment configuration template
-└── README.md
+### 1. Check Prerequisites
+Open Terminal and verify your installed tools:
+```bash
+python3 --version   # Python 3.11 or higher
+node -v             # Node.js 18 or higher
+npm -v              # npm 9 or higher
 ```
 
----
+### 2. Clone / Open Project Directory
+```bash
+cd "/Users/sanjay/AI Document QA Assistant "
+```
 
-## ⚡ Quick Start Guide
+### 3. Backend Setup
+Create and activate a virtual environment, then install Python dependencies:
+```bash
+# Create virtual environment
+python3 -m venv .venv
 
-### 1. Prerequisites
-- **Python 3.10+** (tested through Python 3.14)
-- **Node.js 18+** and **npm**
-- *(Optional)* **MongoDB** (Local `mongod` or MongoDB Atlas URI). If MongoDB is offline, the application seamlessly uses its built-in local persistent store.
-- *(Optional)* **Gemini API Key** from [Google AI Studio](https://aistudio.google.com/). You can add it to `.env` or input it directly via the Settings modal in the UI.
+# Activate virtual environment
+source .venv/bin/activate
 
-### 2. Configure Environment (Optional)
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### 4. Frontend Setup
+Install frontend dependencies:
+```bash
+cd frontend
+npm install
+cd ..
+```
+
+### 5. Environment Variables Configuration
+Copy the sample environment file:
 ```bash
 cp .env.example .env
 ```
-Edit `.env` to provide your `GEMINI_API_KEY` or `MONGODB_URI`:
+
+Edit `.env` with your preferred settings:
 ```ini
+# Google Gemini API Key from Google AI Studio (https://aistudio.google.com/)
 GEMINI_API_KEY=your_gemini_api_key_here
+
+# Gemini Models
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_EMBEDDING_MODEL=text-embedding-004
+
+# MongoDB URI (Atlas or Local)
+# Note: If MongoDB is not running, the app automatically runs in resilient local fallback mode.
 MONGODB_URI=mongodb://localhost:27017
 MONGODB_DB_NAME=doc_qa_assistant
+
+# JWT Security
+JWT_SECRET_KEY=super-secret-doc-qa-jwt-key-2025
+
+# Application Settings
+FRONTEND_ORIGIN=http://localhost:5173
+UPLOAD_DIR=./uploads
+MAX_UPLOAD_SIZE_MB=20
 ```
 
-### 3. Launch Both Servers
+---
+
+## 🚀 Running the Application
+
+### Option A: Unified One-Command Launch (Recommended)
 Run the unified launch script:
 ```bash
 ./start.sh
 ```
 
-Or run them in separate terminals:
+### Option B: Separate Terminal Windows
 
-**Terminal 1 (Backend):**
+**Terminal 1 — FastAPI Backend:**
 ```bash
-python3 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
 python backend/run.py
 ```
-> FastAPI will start on **http://127.0.0.1:8000** (Interactive Swagger docs available at **http://127.0.0.1:8000/docs**).
+> Server running at: **http://127.0.0.1:8000**  
+> Interactive OpenAPI / Swagger Docs at: **http://127.0.0.1:8000/docs**
 
-**Terminal 2 (Frontend):**
+**Terminal 2 — React Vite Frontend:**
 ```bash
 cd frontend
-npm install
 npm run dev
 ```
-> React Vite app will start on **http://127.0.0.1:5173**.
+> Web application running at: **http://127.0.0.1:5173**
 
 ---
 
-## 🧪 Testing the RAG Pipeline
+## 🧪 Testing Instructions
 
-You can run the automated test suite at any time:
+Run the automated test suites:
 
 ```bash
-# 1. Run unit tests (Chunking, Parsing, Embeddings, Database)
-.venv/bin/python test_backend.py
+# 1. Run RAG and unit tests (chunking, parsing, embeddings, auth)
+.venv/bin/python backend/tests/test_rag.py
 
-# 2. Run end-to-end REST API tests (Uploads, Citations, Sessions)
+# 2. Run end-to-end API client tests (HTTP endpoints, upload, RAG ask, history)
 .venv/bin/python test_api_client.py
 ```
 
-### Interactive Walkthrough in the UI:
+### Manual Testing Walkthrough:
 1. Open **http://127.0.0.1:5173** in your browser.
-2. Click **"Load Sample Documents"** (or drag and drop your own PDF, DOCX, or TXT file).
-3. The files will be parsed, segmented into semantic chunks, and embedded into high-dimensional vector space.
-4. Click the **Layers icon** on any document card to open the **Chunk & Embedding Inspector**.
-5. Ask natural-language questions such as:
-   - *"What is the RAG architecture and its key advantages?"*
-   - *"What compliance frameworks were certified in the security report?"*
-   - *"What is the remote work equipment allowance?"*
-6. Review the grounded markdown answer and expand the **"Grounded Sources"** accordion to verify exact page numbers, similarity match percentages, and source snippets.
+2. If not signed in, click **"Instant Demo Sign In (1-Click)"** (or create an account).
+3. On the **Dashboard**, click **"Load Sample Documents"** (or go to **Documents** and drag-and-drop a `.pdf`, `.docx`, or `.txt` file).
+4. Click **Inspect** on any document to view its individual chunks, page tags, and character counts.
+5. Go to **AI Chat** and ask:
+   - *"What are the core components of the RAG architecture?"*
+   - *"What compliance frameworks were audited in the security report?"*
+   - *"What is the remote work equipment stipend?"*
+6. Review the grounded answer and expand the **"Grounded Sources"** accordion to verify the exact page numbers, similarity match scores, and quoted passages.
 
 ---
 
@@ -200,17 +227,49 @@ You can run the automated test suite at any time:
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/api/health` | Health check and system connection diagnostics |
-| `POST` | `/api/auth/register` | Register new user with username, email, and password |
-| `POST` | `/api/auth/login` | Authenticate user and receive JWT bearer token |
-| `POST` | `/api/auth/demo` | Instant demo login for evaluation |
-| `GET` | `/api/auth/me` | Fetch authenticated user profile |
-| `POST` | `/api/documents/upload` | Upload PDF/DOCX/TXT; triggers parsing, chunking, and vector embedding |
-| `GET` | `/api/documents` | List all documents belonging to current user |
-| `GET` | `/api/documents/{id}/chunks` | Inspect text chunks and metadata for a specific document |
-| `DELETE` | `/api/documents/{id}` | Delete document and its corresponding chunk vectors |
-| `POST` | `/api/chat/query` | Execute RAG pipeline: retrieves top-k chunks, generates grounded answer, saves history |
-| `GET` | `/api/chat/sessions` | List user conversation sessions |
-| `GET` | `/api/chat/sessions/{id}/messages` | Retrieve conversation turn history and citations |
-| `DELETE` | `/api/chat/sessions/{id}` | Delete a conversation session |
-| `GET` | `/api/chat/status` | Retrieve database connection and Gemini API status |
+| `GET` | `/health` | Server health check and database status |
+| `POST` | `/auth/register` | Register a new user (`email`, `password`, `username`) |
+| `POST` | `/auth/login` | Authenticate user and receive JWT bearer token |
+| `POST` | `/auth/demo` | Instant demo login for evaluation |
+| `GET` | `/auth/me` | Fetch authenticated user profile |
+| `POST` | `/documents/upload` | Upload PDF/DOCX/TXT; triggers parsing, chunking, and vector embedding |
+| `GET` | `/documents` | List all documents belonging to the authenticated user |
+| `GET` | `/documents/{id}` | Retrieve metadata for a specific document |
+| `GET` | `/documents/{id}/chunks` | Inspect text chunks and metadata for a specific document |
+| `DELETE` | `/documents/{id}` | Delete document, disk file, and associated chunk vectors |
+| `POST` | `/chat/ask` | Execute RAG pipeline: retrieves top-k chunks, generates grounded answer, saves history |
+| `GET` | `/chat/history` | List conversation summaries for the authenticated user |
+| `GET` | `/chat/history/{conversation_id}` | Retrieve conversation turn history and source citations |
+| `DELETE` | `/chat/history/{conversation_id}` | Delete a conversation session |
+| `GET` | `/chat/status` | Retrieve system status, document count, and chunk count |
+
+---
+
+## 🔒 Security & Reliability
+
+* **Password Hashing:** Passwords are never stored in plaintext; hashed with `bcrypt` (12 rounds).
+* **JWT Authorization:** Protected routes require `Authorization: Bearer <token>`.
+* **Document Isolation:** Users can strictly retrieve and delete only documents and chunks they own (`owner_id` check).
+* **Upload Safety:** File extension, MIME type, and size checks prevent malicious uploads.
+* **Prompt Injection Defense:** Model is instructed to disregard prompt injection attempts embedded within document excerpts.
+* **No Leaked Secrets:** API keys are read from environment variables on the backend and never exposed to the frontend bundle.
+
+---
+
+## 🔍 Troubleshooting Guide
+
+* **`Port 8000 or 5173 already in use`:**  
+  Find and kill the conflicting process:
+  ```bash
+  lsof -ti :8000 | xargs kill -9 2>/dev/null
+  lsof -ti :5173 | xargs kill -9 2>/dev/null
+  ```
+* **`MongoDB not running`:**  
+  DocuMind automatically falls back to its local persistent store (`backend/data_storage/*.json`). The application will run without interruption. To connect to MongoDB Atlas, set `MONGODB_URI` in `.env`.
+* **`Gemini API Quota or Missing Key`:**  
+  If `GEMINI_API_KEY` is not provided, the RAG engine seamlessly provides top semantic search excerpts directly from your documents. Add your free key in `.env` to enable conversational generation.
+
+---
+
+## 📄 License
+MIT License. Built for enterprise document question answering and research workflows.

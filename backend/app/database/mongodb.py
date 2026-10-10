@@ -4,18 +4,17 @@ import uuid
 import asyncio
 import logging
 from typing import Any, Dict, List, Optional
-from datetime import datetime
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
-from backend.app.config import settings
+from motor.motor_asyncio import AsyncIOMotorClient
+from backend.app.core.config import settings
 
 logger = logging.getLogger("backend.database")
 
-# In-memory / file-persisted fallback engine for MongoDB collections
+
 class FallbackCursor:
     def __init__(self, items: List[Dict[str, Any]], sort_key: Optional[str] = None, reverse: bool = False):
         self._items = items
         if sort_key:
-            self._items.sort(key=lambda x: x.get(sort_key, ""), reverse=reverse)
+            self._items.sort(key=lambda x: str(x.get(sort_key, "")), reverse=reverse)
 
     def sort(self, key_or_list, direction=1):
         if isinstance(key_or_list, list) and len(key_or_list) > 0:
@@ -75,7 +74,6 @@ class FallbackCollection:
                 continue
             doc_val = doc.get(k)
             if isinstance(v, dict):
-                # Simple mongo operator support ($in, $ne)
                 if "$in" in v and doc_val not in v["$in"]:
                     return False
                 if "$ne" in v and doc_val == v["$ne"]:
@@ -158,8 +156,7 @@ class FallbackCollection:
 
     async def count_documents(self, query: Dict[str, Any]) -> int:
         async with self._lock:
-            count = sum(1 for item in self._data.values() if self._matches(item, query))
-            return count
+            return sum(1 for item in self._data.values() if self._matches(item, query))
 
     async def create_index(self, *args, **kwargs):
         pass
@@ -189,19 +186,28 @@ class DatabaseManager:
     async def connect(self):
         try:
             logger.info(f"Connecting to MongoDB at {settings.MONGODB_URI}...")
-            # Try connecting to MongoDB with a short timeout to prevent hang if server isn't running
             test_client = AsyncIOMotorClient(
                 settings.MONGODB_URI,
                 serverSelectionTimeoutMS=2000,
                 connectTimeoutMS=2000
             )
-            # Ping database
             await test_client.admin.command('ping')
             self.client = test_client
             self.db = self.client[settings.MONGODB_DB_NAME]
             self.is_mongodb_connected = True
             self.status_message = f"Connected to MongoDB ({settings.MONGODB_DB_NAME})"
             logger.info(f"Successfully connected to MongoDB: {settings.MONGODB_URI}")
+            
+            # Create indexes
+            try:
+                await self.db.users.create_index("email", unique=True)
+                await self.db.documents.create_index([("owner_id", 1), ("created_at", -1)])
+                await self.db.document_chunks.create_index([("document_id", 1), ("owner_id", 1)])
+                await self.db.conversations.create_index([("owner_id", 1), ("updated_at", -1)])
+                await self.db.messages.create_index([("conversation_id", 1), ("created_at", 1)])
+            except Exception as e:
+                logger.warning(f"Index creation notice: {e}")
+
         except Exception as e:
             logger.warning(f"MongoDB not reachable ({e}). Falling back to local persistent store.")
             self.client = None
@@ -220,7 +226,6 @@ db_manager = DatabaseManager()
 
 def get_db():
     if db_manager.db is None:
-        # Emergency initialization
         db_manager.db = FallbackDatabase(str(settings.DATA_FALLBACK_DIR))
     return db_manager.db
 

@@ -4,64 +4,96 @@ import logging
 from typing import List, Dict, Any
 import pypdf
 import docx
+from fastapi import HTTPException, status
+from backend.app.core.config import settings
 
 logger = logging.getLogger("backend.parser")
 
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".doc", ".txt", ".md", ".csv"}
+
 
 class DocumentParser:
+    @staticmethod
+    def validate_file(filename: str, file_bytes: bytes):
+        ext = os.path.splitext(filename)[1].lower()
+        if ext not in ALLOWED_EXTENSIONS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unsupported file format '{ext}'. Allowed extensions: PDF, DOCX, TXT, MD, CSV."
+            )
+        
+        max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+        if len(file_bytes) > max_bytes:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File exceeds maximum allowed size of {settings.MAX_UPLOAD_SIZE_MB}MB."
+            )
+
+        if len(file_bytes) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Uploaded file is empty (0 bytes)."
+            )
+
     @staticmethod
     def parse_pdf(file_bytes: bytes) -> List[Dict[str, Any]]:
         pages = []
         try:
             reader = pypdf.PdfReader(io.BytesIO(file_bytes))
             for i, page in enumerate(reader.pages):
-                text = page.extract_text() or ""
-                text = text.strip()
+                text = (page.extract_text() or "").strip()
                 if text:
-                    pages.append({
-                        "page_num": i + 1,
-                        "text": text
-                    })
+                    pages.append({"page_number": i + 1, "text": text})
         except Exception as e:
             logger.error(f"Error parsing PDF: {e}")
-            raise ValueError(f"Failed to parse PDF document: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Could not read PDF file: {str(e)}"
+            )
 
         if not pages:
-            # Fallback if no text extracted (e.g. empty PDF or image-only)
-            pages.append({"page_num": 1, "text": "[Empty or unscannable PDF content]"})
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="PDF appears to be empty or contains scanned images without selectable text."
+            )
         return pages
 
     @staticmethod
     def parse_docx(file_bytes: bytes) -> List[Dict[str, Any]]:
-        pages = []
         try:
             doc = docx.Document(io.BytesIO(file_bytes))
             paragraphs = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
             
-            # Also extract table text
+            # Extract tables
             for table in doc.tables:
                 for row in table.rows:
-                    row_text = " | ".join(cell.text.strip() for cell in row.cells if cell.text.strip())
-                    if row_text:
-                        paragraphs.append(row_text)
+                    row_cells = [c.text.strip() for c in row.cells if c.text.strip()]
+                    if row_cells:
+                        paragraphs.append(" | ".join(row_cells))
 
-            full_text = "\n\n".join(paragraphs)
-            
-            # Approximate pages based on character length (~2000 chars per page)
-            approx_page_size = 2000
-            if len(full_text) <= approx_page_size:
-                pages.append({"page_num": 1, "text": full_text})
-            else:
-                chunks = [full_text[i:i + approx_page_size] for i in range(0, len(full_text), approx_page_size)]
-                for i, chunk_text in enumerate(chunks):
-                    pages.append({"page_num": i + 1, "text": chunk_text.strip()})
+            full_text = "\n\n".join(paragraphs).strip()
+            if not full_text:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="DOCX file contains no readable text."
+                )
+
+            # Paginate approximately by 2000 characters
+            approx_page_len = 2000
+            pages = []
+            for i in range(0, len(full_text), approx_page_len):
+                page_text = full_text[i:i + approx_page_len].strip()
+                if page_text:
+                    pages.append({"page_number": (i // approx_page_len) + 1, "text": page_text})
+            return pages
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Error parsing DOCX: {e}")
-            raise ValueError(f"Failed to parse DOCX document: {str(e)}")
-
-        if not pages:
-            pages.append({"page_num": 1, "text": "[Empty DOCX content]"})
-        return pages
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Failed to parse DOCX document: {str(e)}"
+            )
 
     @staticmethod
     def parse_txt(file_bytes: bytes) -> List[Dict[str, Any]]:
@@ -69,31 +101,32 @@ class DocumentParser:
         text = ""
         for enc in encodings:
             try:
-                text = file_bytes.decode(enc)
+                text = file_bytes.decode(enc).strip()
                 break
             except UnicodeDecodeError:
                 continue
 
-        text = text.strip()
+        if not text:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Text document is empty or could not be decoded."
+            )
+
+        approx_page_len = 2000
         pages = []
-        approx_page_size = 2000
-        if len(text) <= approx_page_size:
-            pages.append({"page_num": 1, "text": text or "[Empty text content]"})
-        else:
-            chunks = [text[i:i + approx_page_size] for i in range(0, len(text), approx_page_size)]
-            for i, chunk_text in enumerate(chunks):
-                pages.append({"page_num": i + 1, "text": chunk_text.strip()})
+        for i in range(0, len(text), approx_page_len):
+            chunk = text[i:i + approx_page_len].strip()
+            if chunk:
+                pages.append({"page_number": (i // approx_page_len) + 1, "text": chunk})
         return pages
 
     @classmethod
-    def parse_file(cls, filename: str, file_bytes: bytes) -> List[Dict[str, Any]]:
+    def parse_document(cls, filename: str, file_bytes: bytes) -> List[Dict[str, Any]]:
+        cls.validate_file(filename, file_bytes)
         ext = os.path.splitext(filename)[1].lower()
         if ext == ".pdf":
             return cls.parse_pdf(file_bytes)
         elif ext in [".docx", ".doc"]:
             return cls.parse_docx(file_bytes)
-        elif ext in [".txt", ".md", ".csv", ".json", ".log"]:
-            return cls.parse_txt(file_bytes)
         else:
-            # Try parsing as plain text by default
             return cls.parse_txt(file_bytes)

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { X, Layers, FileText, Hash, Bookmark } from 'lucide-react';
+import { X, Layers, Hash, Bookmark } from 'lucide-react';
 import { api } from '../services/api';
 
 export default function ChunkInspectorModal({ doc, onClose }) {
@@ -12,7 +12,7 @@ export default function ChunkInspectorModal({ doc, onClose }) {
     async function loadChunks() {
       try {
         setLoading(true);
-        const data = await api.getDocumentChunks(doc.id);
+        const data = await api.getDocumentChunks(doc.document_id || doc.id);
         setChunks(data);
       } catch (err) {
         setError(err.message || 'Failed to load document chunks');
@@ -26,56 +26,58 @@ export default function ChunkInspectorModal({ doc, onClose }) {
   if (!doc) return null;
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-panel modal-lg" onClick={(e) => e.stopPropagation()}>
-        <div className="modal-header">
-          <div className="modal-title-group">
-            <Layers className="text-primary" size={20} />
+    <div className="modal-backdrop-light" onClick={onClose}>
+      <div className="modal-dialog-card modal-lg" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-dialog-header">
+          <div className="modal-title-row">
+            <Layers className="text-blue" size={20} />
             <div>
-              <h3 className="modal-title">Chunk & Embedding Inspector</h3>
-              <p className="modal-subtitle">
-                Inspecting segmented vectors for <strong>{doc.filename}</strong> ({doc.chunk_count} chunks)
+              <h3 className="modal-heading">Chunk & Embedding Inspector</h3>
+              <p className="modal-subheading">
+                Displaying indexed vectors for <strong>{doc.filename}</strong> ({chunks.length} chunks)
               </p>
             </div>
           </div>
-          <button className="btn-close" onClick={onClose} aria-label="Close modal">
+          <button className="btn-modal-close" onClick={onClose} aria-label="Close dialog">
             <X size={18} />
           </button>
         </div>
 
-        <div className="modal-body inspector-body">
+        <div className="modal-dialog-body">
           {loading ? (
-            <div className="loading-state">
-              <span className="spinner-inline"></span>
-              <span>Loading semantic segments...</span>
+            <div className="empty-panel-state">
+              <span className="spinner-inline-blue"></span>
+              <p>Loading chunks from vector store...</p>
             </div>
           ) : error ? (
-            <div className="alert-error">{error}</div>
+            <div className="alert-banner alert-warning">{error}</div>
           ) : (
-            <div className="chunks-inspector-list">
+            <div className="chunks-list-flow">
               {chunks.map((c) => (
-                <div key={c.id || c.chunk_index} className="chunk-inspector-card">
-                  <div className="chunk-inspector-header">
-                    <span className="chunk-badge">
+                <div key={c.chunk_id || c.chunk_index} className="chunk-card-light">
+                  <div className="chunk-card-meta">
+                    <span className="chunk-index-tag">
                       <Hash size={12} />
                       Chunk #{c.chunk_index}
                     </span>
-                    <span className="page-badge">
+                    <span className="chunk-page-tag">
                       <Bookmark size={12} />
-                      Page {c.page_num || 1}
+                      Page {c.page_number || 1}
                     </span>
-                    <span className="char-badge">{c.char_count} chars</span>
+                    <span className="chunk-char-tag">
+                      {c.char_count || c.chunk_text.length} characters
+                    </span>
                   </div>
-                  <pre className="chunk-content-text">{c.content}</pre>
+                  <p className="chunk-text-box">{c.chunk_text}</p>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        <div className="modal-footer">
-          <span className="text-muted-sm">
-            Each chunk is embedded into high-dimensional vector space for cosine similarity search.
+        <div className="modal-dialog-footer">
+          <span className="footer-annotation">
+            Chunks are indexed with dense semantic embeddings for cosine similarity retrieval.
           </span>
           <button className="btn-secondary" onClick={onClose}>Close</button>
         </div>

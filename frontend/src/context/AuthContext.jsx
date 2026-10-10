@@ -6,11 +6,10 @@ const AuthContext = createContext(null);
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(() => localStorage.getItem('doc_qa_token') || '');
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('gemini_custom_api_key') || '');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function checkAuth() {
+    async function initAuth() {
       if (token) {
         try {
           const me = await api.getMe();
@@ -23,41 +22,31 @@ export function AuthProvider({ children }) {
           logout();
         }
       } else {
-        // Automatically attempt demo login so user has a zero-friction instant experience
+        // Automatically login with demo user for seamless zero-barrier experience
         try {
           const res = await api.demoLogin();
           setToken(res.access_token);
           localStorage.setItem('doc_qa_token', res.access_token);
           setUser(res.user);
         } catch (e) {
-          console.warn('Demo login failed on init:', e);
+          console.warn('Demo login init failed:', e);
         }
       }
       setLoading(false);
     }
-    checkAuth();
+    initAuth();
   }, []);
 
-  const handleSetApiKey = (key) => {
-    const trimmed = key ? key.trim() : '';
-    setApiKey(trimmed);
-    if (trimmed) {
-      localStorage.setItem('gemini_custom_api_key', trimmed);
-    } else {
-      localStorage.removeItem('gemini_custom_api_key');
-    }
-  };
-
-  const login = async (identifier, password) => {
-    const res = await api.login(identifier, password);
+  const login = async (email, password) => {
+    const res = await api.login(email, password);
     setToken(res.access_token);
     localStorage.setItem('doc_qa_token', res.access_token);
     setUser(res.user);
     return res.user;
   };
 
-  const register = async (username, email, password) => {
-    const res = await api.register(username, email, password);
+  const register = async (email, password, username = '') => {
+    const res = await api.register(email, password, username);
     setToken(res.access_token);
     localStorage.setItem('doc_qa_token', res.access_token);
     setUser(res.user);
@@ -83,8 +72,6 @@ export function AuthProvider({ children }) {
       value={{
         user,
         token,
-        apiKey,
-        setApiKey: handleSetApiKey,
         isAuthenticated: !!user,
         loading,
         login,

@@ -1,7 +1,7 @@
-// Frontend API client communicating with FastAPI backend
+// Frontend API service communicating with FastAPI backend
 const API_BASE = '/api';
 
-function getAuthHeaders(customApiKey = null) {
+function getAuthHeaders() {
   const headers = {};
   const token = localStorage.getItem('doc_qa_token');
   if (token) {
@@ -12,11 +12,11 @@ function getAuthHeaders(customApiKey = null) {
 
 export const api = {
   // Auth endpoints
-  async register(username, email, password) {
+  async register(email, password, username = '') {
     const res = await fetch(`${API_BASE}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, email, password }),
+      body: JSON.stringify({ email, password, username: username || undefined }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
@@ -25,15 +25,15 @@ export const api = {
     return res.json();
   },
 
-  async login(username_or_email, password) {
+  async login(email, password) {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username_or_email, password }),
+      body: JSON.stringify({ email, password }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || 'Login failed');
+      throw new Error(err.detail || 'Invalid email or password');
     }
     return res.json();
   },
@@ -67,12 +67,9 @@ export const api = {
     return res.json();
   },
 
-  async uploadDocument(file, customApiKey = null) {
+  async uploadDocument(file) {
     const formData = new FormData();
     formData.append('file', file);
-    if (customApiKey) {
-      formData.append('api_key', customApiKey);
-    }
 
     const res = await fetch(`${API_BASE}/documents/upload`, {
       method: 'POST',
@@ -81,21 +78,29 @@ export const api = {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || 'Upload failed');
+      throw new Error(err.detail || 'Document upload failed');
     }
     return res.json();
   },
 
-  async getDocumentChunks(docId) {
-    const res = await fetch(`${API_BASE}/documents/${docId}/chunks`, {
+  async getDocument(documentId) {
+    const res = await fetch(`${API_BASE}/documents/${documentId}`, {
       headers: getAuthHeaders(),
     });
-    if (!res.ok) throw new Error('Failed to load chunks');
+    if (!res.ok) throw new Error('Failed to retrieve document details');
     return res.json();
   },
 
-  async deleteDocument(docId) {
-    const res = await fetch(`${API_BASE}/documents/${docId}`, {
+  async getDocumentChunks(documentId) {
+    const res = await fetch(`${API_BASE}/documents/${documentId}/chunks`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to load document chunks');
+    return res.json();
+  },
+
+  async deleteDocument(documentId) {
+    const res = await fetch(`${API_BASE}/documents/${documentId}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
     });
@@ -104,59 +109,58 @@ export const api = {
   },
 
   // Chat / RAG endpoints
-  async sendQuery({ query, docId = null, conversationId = null, topK = 4, apiKey = null }) {
-    const res = await fetch(`${API_BASE}/chat/query`, {
+  async askQuestion({ question, documentId = null, conversationId = null, topK = 4 }) {
+    const res = await fetch(`${API_BASE}/chat/ask`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         ...getAuthHeaders(),
       },
       body: JSON.stringify({
-        query,
-        doc_id: docId,
+        question,
+        document_id: documentId,
         conversation_id: conversationId,
         top_k: topK,
-        api_key: apiKey,
       }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      throw new Error(err.detail || 'Query execution failed');
+      throw new Error(err.detail || 'Failed to generate answer');
     }
     return res.json();
   },
 
-  async listSessions() {
-    const res = await fetch(`${API_BASE}/chat/sessions`, {
+  async listChatHistory() {
+    const res = await fetch(`${API_BASE}/chat/history`, {
       headers: getAuthHeaders(),
     });
-    if (!res.ok) throw new Error('Failed to fetch chat sessions');
+    if (!res.ok) throw new Error('Failed to load conversation history');
     return res.json();
   },
 
-  async getSessionMessages(sessionId) {
-    const res = await fetch(`${API_BASE}/chat/sessions/${sessionId}/messages`, {
+  async getConversationMessages(conversationId) {
+    const res = await fetch(`${API_BASE}/chat/history/${conversationId}`, {
       headers: getAuthHeaders(),
     });
-    if (!res.ok) throw new Error('Failed to fetch messages');
+    if (!res.ok) throw new Error('Failed to load messages');
     return res.json();
   },
 
-  async deleteSession(sessionId) {
-    const res = await fetch(`${API_BASE}/chat/sessions/${sessionId}`, {
+  async deleteConversation(conversationId) {
+    const res = await fetch(`${API_BASE}/chat/history/${conversationId}`, {
       method: 'DELETE',
       headers: getAuthHeaders(),
     });
-    if (!res.ok) throw new Error('Failed to delete session');
+    if (!res.ok) throw new Error('Failed to delete conversation');
     return res.json();
   },
 
-  // Health and Status
+  // System Diagnostics
   async getStatus() {
     const res = await fetch(`${API_BASE}/chat/status`, {
       headers: getAuthHeaders(),
     });
-    if (!res.ok) throw new Error('Failed to fetch status');
+    if (!res.ok) throw new Error('Failed to load system status');
     return res.json();
   },
 };

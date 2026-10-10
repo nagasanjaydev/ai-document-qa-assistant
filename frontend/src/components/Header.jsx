@@ -1,78 +1,87 @@
 import React from 'react';
-import { Sparkles, Database, Key, Settings, User, LogOut, FileText } from 'lucide-react';
+import { FileText, Sparkles, Database, LayoutDashboard, MessageSquare, Files, LogOut, User } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
-export default function Header({ statusInfo, onOpenSettings, onOpenAuth }) {
-  const { user, logout, apiKey } = useAuth();
-
-  const isGeminiActive = !!apiKey || !!statusInfo?.gemini_api_configured;
+export default function Header({ currentView, onNavigate, statusInfo, onOpenAuth }) {
+  const { user, logout } = useAuth();
   const isMongoConnected = !!statusInfo?.mongodb_connected;
 
   return (
-    <header className="app-header">
-      <div className="header-brand">
-        <div className="brand-logo">
-          <FileText className="brand-icon" size={24} />
-          <Sparkles className="sparkle-badge" size={14} />
-        </div>
-        <div>
-          <h1 className="brand-title">DocuMind AI</h1>
-          <p className="brand-subtitle">AI-Powered Document QA Assistant (RAG + Gemini)</p>
-        </div>
-      </div>
-
-      <div className="header-status-group">
-        {/* Database Status Badge */}
-        <div
-          className={`status-chip ${isMongoConnected ? 'status-chip-success' : 'status-chip-warning'}`}
-          title={statusInfo?.db_status_message || 'Database status'}
-        >
-          <Database size={14} />
-          <span>{isMongoConnected ? 'MongoDB Connected' : 'Local Store Active'}</span>
-        </div>
-
-        {/* Gemini Model Status Badge */}
-        <div
-          className={`status-chip ${isGeminiActive ? 'status-chip-primary' : 'status-chip-muted'}`}
-          onClick={onOpenSettings}
-          style={{ cursor: 'pointer' }}
-          title={isGeminiActive ? `Model: ${statusInfo?.gemini_model || 'gemini-2.5-flash'}` : 'Click to configure Gemini API Key'}
-        >
-          <Key size={14} />
-          <span>{isGeminiActive ? 'Gemini 2.5 Active' : 'Configure API Key'}</span>
-        </div>
-
-        {/* Settings button */}
-        <button
-          className="btn-icon"
-          onClick={onOpenSettings}
-          title="System Settings & API Key"
-          aria-label="Settings"
-        >
-          <Settings size={18} />
-        </button>
-
-        {/* User Auth Menu */}
-        {user ? (
-          <div className="user-profile-badge">
-            <div className="user-avatar" title={`Logged in as ${user.username}`}>
-              <User size={15} />
-            </div>
-            <span className="username-text">{user.username}</span>
-            <button
-              className="btn-logout"
-              onClick={logout}
-              title="Sign Out"
-              aria-label="Sign Out"
-            >
-              <LogOut size={15} />
-            </button>
+    <header className="navbar-header">
+      <div className="navbar-container">
+        {/* Brand */}
+        <div className="navbar-brand" onClick={() => onNavigate('dashboard')} style={{ cursor: 'pointer' }}>
+          <div className="brand-icon-wrapper">
+            <FileText size={20} className="brand-icon" />
+            <Sparkles size={12} className="brand-sparkle" />
           </div>
-        ) : (
-          <button className="btn-primary-sm" onClick={onOpenAuth}>
-            Sign In / Register
-          </button>
+          <div>
+            <h1 className="brand-name">DocuMind AI</h1>
+            <span className="brand-tag">Document QA Assistant</span>
+          </div>
+        </div>
+
+        {/* Navigation Tabs */}
+        {user && (
+          <nav className="navbar-nav">
+            <button
+              className={`nav-tab-btn ${currentView === 'dashboard' ? 'nav-tab-active' : ''}`}
+              onClick={() => onNavigate('dashboard')}
+            >
+              <LayoutDashboard size={16} />
+              <span>Dashboard</span>
+            </button>
+            <button
+              className={`nav-tab-btn ${currentView === 'chat' ? 'nav-tab-active' : ''}`}
+              onClick={() => onNavigate('chat')}
+            >
+              <MessageSquare size={16} />
+              <span>AI Chat</span>
+            </button>
+            <button
+              className={`nav-tab-btn ${currentView === 'documents' ? 'nav-tab-active' : ''}`}
+              onClick={() => onNavigate('documents')}
+            >
+              <Files size={16} />
+              <span>Documents</span>
+            </button>
+          </nav>
         )}
+
+        {/* Right Action / Profile */}
+        <div className="navbar-actions">
+          {/* Status Chip */}
+          <div
+            className={`status-chip ${isMongoConnected ? 'status-connected' : 'status-fallback'}`}
+            title={statusInfo?.db_status_message || 'Database status'}
+          >
+            <Database size={13} />
+            <span>{isMongoConnected ? 'MongoDB Online' : 'Local Storage Mode'}</span>
+          </div>
+
+          {user ? (
+            <div className="user-profile-menu">
+              <div className="user-info-chip">
+                <div className="user-avatar-circle">
+                  <User size={14} />
+                </div>
+                <span className="user-display-name">{user.username || user.email}</span>
+              </div>
+              <button
+                className="btn-icon-subtle"
+                onClick={logout}
+                title="Sign Out"
+                aria-label="Sign out"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+          ) : (
+            <button className="btn-primary-sm" onClick={onOpenAuth}>
+              Sign In
+            </button>
+          )}
+        </div>
       </div>
     </header>
   );
